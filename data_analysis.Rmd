@@ -59,65 +59,44 @@ dataset$tract_median_income_ink = round(tract_median_income/1000)
 
 ```{r tract_median_income density plot}
 den = density(log10(dataset$tract_median_income_ink))
-plot(den, main = "График плотности среднего дохода")
+plot(den, main = "График плотности распределения среднего дохода", ylab = "Плотность")
 ```
 
-```{r}
-plot(density(log10(dataset$loan_amount_ink)), main = "Плотность суммы кредита", ylab = "Плотность")
+```{r loan_amount_ink density}
+plot(density(log10(dataset$loan_amount_ink)), main = "Плотность распределения суммы кредита", ylab = "Плотность")
 ```
 
-```{r}
+```{r applicant_income_ink density}
+plot(density(log10(dataset$applicant_income_ink)), main = "Плотность распределения дохода заявителя", ylab = "Плотность")
+```
+
+```{r minority_population_pct density}
+plot(density(log10(dataset$minority_population_pct)), main = "Плотность распределения доли меньшинства", ylab = "Плотность")
+```
+
+```{r credit classification}
 with(dataset,  {
  homepurchase = density(log10(subset(loan_amount_ink, loan_purpose=="Home purchase")))
  homeimprovement = density(log10(subset(loan_amount_ink, loan_purpose=="Home improvement")))
  refinance = density(log10(subset(loan_amount_ink, loan_purpose=="Refinancing")))
  
- plot(homepurchase, col="red", main="Классификация кредитов" , xlab = "Log(Сумма кредита)", ylab = "Плотность")
+ plot(homepurchase, col="red", main="Плотность распределения кредитов по типу" , xlab = "Log(Сумма кредита)", ylab = "Плотность распределения")
  lines(homeimprovement, col="blue")
  lines(refinance, col="green")
+ legend(0.35, 1.8, legend=c("Покупка дома", "Улучшение жилищных условий", "Рефинансирование"),
+       col=c("red", "blue", "green"), lty=1, cex=0.8)
 })
 ```
 
-```{r}
-plot(density(log10(dataset$loan_amount_ink)), main = "Плотность суммы кредита")
-abline(v=440)
-abline(v=400)
-```
-
-```{r}
-# what is that spike at about 400K? Smooth up until then. That and past it is one or two other populations.
-# Let's try a model for below that spike. In principle, we can develop a separate model beyond that spike
-# (Note, they might also want to eliminate some of the very small loans that trail out on the right.
-# I didn't do that here, but it would be a fair thing for them to do)
-filter = dataset$loan_amount_ink <= 400
-# ggplot(dataset[filter,], aes(x=Loan_Amount_inK, colour=loanpurpose)) + geom_density(adjust=0.5) + scale_x_log10()
-
-plot(density(log10(dataset$loan_amount_ink)), main="Loan Amount Density")
-abline(v=440)
-abline(v=400)
-```
-
-
-```{r}
-
-
-
-
-
-sum(filter)/length(filter) # we lose about 4% of the loan data.
-
-dataset = dataset[filter,]
-
-plot(density(dataset$loan_amount_ink), main="Loan Amount Density <= 400 thousand", xlab="Income in thousands")
-#
-# till here
-# subset to only originated and denied: reasoning -- borrowers will take most advantageous loan they can.
-# This might be part of the starting scenario
-#
-
+Нас интересуют действия по выдаче кредита либо отказу. Отфильтруем данные:
+```{r originated/denied filter}
 filter = with(dataset, action_type %in% c("Originated", "Denied"))
 dataset = dataset[filter,]
-dataset$approved = dataset$action_type=="Originated"
+dataset$approved = dataset$action_type =="Originated"
+```
+Первоначальные вероятности одобрения кредита:
+```{r approved probability}
 table(dataset$approved)/dim(dataset)[1]
 ```
+
 
