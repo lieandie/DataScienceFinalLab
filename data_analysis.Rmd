@@ -5,7 +5,7 @@ output: html_notebook
 
 ## Загрузка подготовленного датасета
 ```{r dataset load}
-dataset <- read.csv2('const_dataset.csv', sep=',')
+dataset <- read.csv('const_dataset.csv', sep=',')
 dataset <- subset(dataset, minority_population_pct!=0)
 dataset <- subset(dataset, tract_to_msamd_income_pct!=0)
 ```
@@ -34,26 +34,90 @@ dataset$state_name = factor(dataset$state_name)
 with(dataset, head(table(rate_spread, action_type), n = 15))
 ```
 ### Исследование зависимости отношения статуса предварительного одобрения и расы
-Отношение принятых/отклоненных заявок:
+Отношение Запрошенных/отклоненных заявок:
 
-Раса | Принятых/отклоненных заявок
+Раса | Запрошенных/отклоненных заявок
 ------------- | -------------
-AmerInd.AlaskaNat | 0,025436047
-Asian | 0,031472684
-Black.AfroAmer | 0,041377027
+AmerInd.AlaskaNat | 0,025510204
+Asian | 0,031478915
+Black.AfroAmer | 0,041154995
 Hawaiian.PacificIs | 0,037037037
-No Info | 0,019053249
+No Info | 0,01891855
 Not Applicable | 0,012048193
-White | 0,0289
+White | 0,028921694
 
-Афроамериканцы чаще получают предварительное одобрение чем другие расы
+Афроамериканцы реже получают предварительный отказ чем другие расы
 ```{r race vs preapproval}
 with(dataset, table(applicant_race_1, preapproval))
 ```
-```{r race vs action_type}
-with(dataset, table(applicant_race_1, action_type))
+
+Предположим, что средний доход является значимым фактором:
+```{r tract_median_income}
+tract_median_income = with(dataset, hud_median_family_income*(tract_to_msamd_income_pct/100))
+dataset$tract_median_income_ink = round(tract_median_income/1000) 
 ```
+
+```{r tract_median_income density plot}
+den = density(log10(dataset$tract_median_income_ink))
+plot(den, main = "График плотности среднего дохода")
+```
+
 ```{r}
-with(dataset, hist(as.numeric(applicant_income_ink)))
+plot(density(log10(dataset$loan_amount_ink)), main = "Плотность суммы кредита", ylab = "Плотность")
+```
+
+```{r}
+with(dataset,  {
+ homepurchase = density(log10(subset(loan_amount_ink, loan_purpose=="Home purchase")))
+ homeimprovement = density(log10(subset(loan_amount_ink, loan_purpose=="Home improvement")))
+ refinance = density(log10(subset(loan_amount_ink, loan_purpose=="Refinancing")))
+ 
+ plot(homepurchase, col="red", main="Классификация кредитов" , xlab = "Log(Сумма кредита)", ylab = "Плотность")
+ lines(homeimprovement, col="blue")
+ lines(refinance, col="green")
+})
+```
+
+```{r}
+plot(density(log10(dataset$loan_amount_ink)), main = "Плотность суммы кредита")
+abline(v=440)
+abline(v=400)
+```
+
+```{r}
+# what is that spike at about 400K? Smooth up until then. That and past it is one or two other populations.
+# Let's try a model for below that spike. In principle, we can develop a separate model beyond that spike
+# (Note, they might also want to eliminate some of the very small loans that trail out on the right.
+# I didn't do that here, but it would be a fair thing for them to do)
+filter = dataset$loan_amount_ink <= 400
+# ggplot(dataset[filter,], aes(x=Loan_Amount_inK, colour=loanpurpose)) + geom_density(adjust=0.5) + scale_x_log10()
+
+plot(density(log10(dataset$loan_amount_ink)), main="Loan Amount Density")
+abline(v=440)
+abline(v=400)
+```
+
+
+```{r}
+
+
+
+
+
+sum(filter)/length(filter) # we lose about 4% of the loan data.
+
+dataset = dataset[filter,]
+
+plot(density(dataset$loan_amount_ink), main="Loan Amount Density <= 400 thousand", xlab="Income in thousands")
+#
+# till here
+# subset to only originated and denied: reasoning -- borrowers will take most advantageous loan they can.
+# This might be part of the starting scenario
+#
+
+filter = with(dataset, action_type %in% c("Originated", "Denied"))
+dataset = dataset[filter,]
+dataset$approved = dataset$action_type=="Originated"
+table(dataset$approved)/dim(dataset)[1]
 ```
 
