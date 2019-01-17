@@ -1,6 +1,7 @@
 ---
-title: "R Notebook"
+title: "Final Lab"
 output: html_notebook
+author: Скубников Кирилл, Титов Алексей, Назаров Антон
 ---
 
 ## Загрузка подготовленного датасета
@@ -10,7 +11,7 @@ dataset <- subset(dataset, minority_population_pct!=0)
 dataset <- subset(dataset, tract_to_msamd_income_pct!=0)
 ```
 
-## Статистика отношения заполненных/незаполненных данных, полученная в процессе чистки на ЯП Python (Notebook приложен)
+## Статистика отношения заполненных/незаполненных данных, полученная в процессе чистки на Python (Notebook приложен)
 ![](fill_rate.jpg)
 
 ## Определение факторов датафрейма
@@ -53,12 +54,12 @@ with(dataset, table(applicant_race_1, preapproval))
 
 Предположим, что средний доход является значимым фактором:
 ```{r tract_median_income}
-tract_median_income = with(dataset, hud_median_family_income*(tract_to_msamd_income_pct/100))
-dataset$tract_median_income_ink = round(tract_median_income/1000) 
+tract_median_income <- with(dataset, hud_median_family_income*(tract_to_msamd_income_pct/100))
+dataset$tract_median_income_ink <- round(tract_median_income/1000) 
 ```
 
 ```{r tract_median_income density plot}
-den = density(log10(dataset$tract_median_income_ink))
+den <- density(log10(dataset$tract_median_income_ink))
 plot(den, main = "График плотности распределения среднего дохода", ylab = "Плотность")
 ```
 
@@ -76,11 +77,11 @@ plot(density(log10(dataset$minority_population_pct)), main = "Плотность
 
 ```{r credit classification}
 with(dataset,  {
- homepurchase = density(log10(subset(loan_amount_ink, loan_purpose=="Home purchase")))
- homeimprovement = density(log10(subset(loan_amount_ink, loan_purpose=="Home improvement")))
- refinance = density(log10(subset(loan_amount_ink, loan_purpose=="Refinancing")))
+ homepurchase <- density(log10(subset(loan_amount_ink, loan_purpose=="Home purchase")))
+ homeimprovement <- density(log10(subset(loan_amount_ink, loan_purpose=="Home improvement")))
+ refinance <- density(log10(subset(loan_amount_ink, loan_purpose=="Refinancing")))
  
- plot(homepurchase, col="red", main="Плотность распределения кредитов по типу" , xlab = "Log(Сумма кредита)", ylab = "Плотность распределения")
+ plot(homepurchase, col="red", main="Плотность распределения кредитов по типу" , xlab = "log(Сумма кредита)", ylab = "Плотность распределения")
  lines(homeimprovement, col="blue")
  lines(refinance, col="green")
  legend(0.35, 1.8, legend=c("Покупка дома", "Улучшение жилищных условий", "Рефинансирование"),
@@ -88,15 +89,32 @@ with(dataset,  {
 })
 ```
 
-Нас интересуют действия по выдаче кредита либо отказу. Отфильтруем данные:
+Нас интересуют действия по выдаче кредита либо отказу. Отфильтруем данные и создадим дополнительный столбец:
 ```{r originated/denied filter}
-filter = with(dataset, action_type %in% c("Originated", "Denied"))
-dataset = dataset[filter,]
-dataset$approved = dataset$action_type =="Originated"
+filter <- with(dataset, action_type %in% c("Originated", "Denied"))
+dataset <- dataset[filter,]
+dataset$approved <- dataset$action_type =="Originated"
 ```
 Первоначальные вероятности одобрения кредита:
 ```{r approved probability}
 table(dataset$approved)/dim(dataset)[1]
 ```
+
+## Построение модели
+Нашей зависимой переменной является одобрение кредита:
+```{r depended value init}
+depended <- "approved"
+```
+Также перечислим влияющие переменные (для денежных переменных используется log):
+```{r factor list init}
+predictors = c("log10(tract_median_income_ink)",  "log10(applicant_income_ink)", "log10(loan_amount_ink)", "loan_type", "loan_purpose", "lien_status", "applicant_race_1", "applicant_ethnicity", "applicant_sex", "county_name", "state_name", "minority_population_pct") 
+```
+
+В целях удобства построим строковое представление регресионной зависимости для дальнейшего ее использования в процессе построения модели. (подход найден на просторах всемирной сети :))
+```{r query string build}
+modelStringRepresentation = paste(depended, "~", paste(predictors, collapse=" + "))
+modelStringRepresentation
+```
+
 
 
