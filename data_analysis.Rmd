@@ -3,12 +3,16 @@ title: "Final Lab"
 output: html_notebook
 author: Скубников Кирилл, Титов Алексей, Назаров Антон
 ---
+```{r}
+library(ROCR)
+```
 
 ## Загрузка подготовленного датасета
 ```{r dataset load}
 dataset <- read.csv('const_dataset.csv', sep=',')
 dataset <- subset(dataset, minority_population_pct!=0)
 dataset <- subset(dataset, tract_to_msamd_income_pct!=0)
+dataset <- subset(dataset, applicant_income_ink!=0)
 ```
 
 ## Статистика отношения заполненных/незаполненных данных, полученная в процессе чистки на Python (Notebook приложен)
@@ -107,7 +111,7 @@ depended <- "approved"
 ```
 Также перечислим влияющие переменные (для денежных переменных используется log):
 ```{r factor list init}
-predictors = c("log10(tract_median_income_ink)",  "log10(applicant_income_ink)", "log10(loan_amount_ink)", "loan_type", "loan_purpose", "lien_status", "applicant_race_1", "applicant_ethnicity", "applicant_sex", "county_name", "state_name", "minority_population_pct") 
+predictors = c("log10(tract_median_income_ink)",  "log10(applicant_income_ink)", "log10(loan_amount_ink)", "loan_type", "loan_purpose", "lien_status", "applicant_race_1", "applicant_ethnicity", "applicant_sex", "county_name", "minority_population_pct") 
 ```
 
 В целях удобства построим строковое представление регресионной зависимости для дальнейшего ее использования в процессе построения модели. (подход найден на просторах всемирной сети :))
@@ -115,6 +119,105 @@ predictors = c("log10(tract_median_income_ink)",  "log10(applicant_income_ink)",
 modelStringRepresentation = paste(depended, "~", paste(predictors, collapse=" + "))
 modelStringRepresentation
 ```
+Выберем 10% от исходных данных (использован код из подсказки)
+```{r small dataset generating}
+dataset$gp <- runif(dim(dataset)[1])
+smallset <- subset(dataset, dataset$gp < 0.15) # 15% of data
+smallset$X <- NULL
+```
+
+
+```{r initial model build}
+firstModel <- glm(modelStringRepresentation, data = smallset, family = binomial(link = "logit"))
+summary(firstModel)
+```
+```{r first model determination}
+1 - firstModel$deviance/firstModel$null.deviance
+```
+```{r factor list second}
+predictorsSecond = c("log10(tract_median_income_ink)",  "log10(applicant_income_ink)", "log10(loan_amount_ink)", "loan_type", "loan_purpose", "lien_status", "county_name", "minority_population_pct") 
+```
+```{r query string build second}
+modelString = paste(depended, "~", paste(predictorsSecond, collapse=" + "))
+modelString
+```
+```{r second model build}
+secondModel <- glm(modelString, data = smallset, family = binomial(link = "logit"))
+summary(secondModel)
+```
+```{r second model determination}
+1 - secondModel$deviance/secondModel$null.deviance
+```
+Результаты без использования личных данных немного хуже полной модели. Лучше исходные данные объясняет полная модель. Попробуем построить модель на большей выборке
+
+Выберем 25% от исходных данных (использован код из подсказки)
+```{r second small dataset generating}
+dataset$gp <- runif(dim(dataset)[1])
+smallset2 <- subset(dataset, dataset$gp < 0.25) # 15% of data
+smallset2$X <- NULL
+```
+
+```{r third model build}
+thirdModel <- glm(modelStringRepresentation, data = smallset2, family = binomial(link = "logit"))
+summary(thirdModel)
+```
+
+```{r third model determination}
+1 - thirdModel$deviance/thirdModel$null.deviance
+```
+С увеличением выборки и применением исходной модели независимых переменных позволило получить лучший результат
+```{r roc auc first}
+thirdModelPrediction <- prediction(predict(firstModel, type = "response"), smallset$approved)
+rocThirdModel <- performance(thirdModelPrediction, "tpr", x.measure = "fpr")
+aucThirdModel <- performance(thirdModelPrediction, "auc")
+```
+
+```{r roc auc second}
+secondModelPrediction <- prediction(predict(secondModel, type = "response"), smallset$approved)
+rocSecondModel <- performance(secondModelPrediction, "tpr", x.measure = "fpr")
+aucSecondModel <- performance(secondModelPrediction, "auc")
+```
+```{r compare auc}
+print(aucThirdModel@y.values[1])
+print(aucSecondModel@y.values[1])
+```
+```{r roc plot}
+plot(rocThirdModel, col="red", main="ROC")  
+plot(rocSecondModel, text.col="blue", col="blue", add=T)
+legend(0.01, 1, legend=c("Модель с личными данными", "Модель без личных данных"),
+       col=c("red", "blue"), lty=1, cex=0.8)
+```
+
+AUC и ROC моделей приближенно являются одинаковыми, следовательно можно предположить, что в данном случае это одна и та же модель.
+## Исходя из бизнес-требований необходимо, чтобы предсказания носили ранжированный вид в форме: высокая, среднаяя или низкая вероятность получить кредит
+Инициализация пороговых вероятностей
+```{r threshholds defining}
+low = 0.5
+high = 0.75
+```
+Тестовая выборка 35%
+```{r test dataset init}
+dataset$gp <- runif(dim(dataset)[1])
+test <- subset(dataset, dataset$gp < 0.35)
+test$X <- NULL
+```
+
+```{r test prediction}
+testPrediciton <- predict(thirdModel, newdata = test, type = "response")
+```
+Замена числовых значений формализованным текстовым представлением
+```{r formalisation}
+formalisedResult <- cut(testPrediciton, breaks = c(0, low, high, 1.0), labels = c("low", "middle", "hi"), include.lowest=T)
+```
+
+Отношение числа заявок к сумме кол-ва формализованных результатов
+```{r sum up}
+options(scipen=999)
+
+colSums(resultTable)/sum(colSums(resultTable))
+```
+
+
 
 
 
